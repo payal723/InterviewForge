@@ -22,9 +22,9 @@ import FormField from "./FormField";
 
 const authFormSchema = (type: FormType) => {
   return z.object({
-    name: type === "sign-up" ? z.string().min(3) : z.string().optional(),
-    email: z.string().email(),
-    password: z.string().min(3),
+    name: type === "sign-up" ? z.string().min(3, "Name must be at least 3 characters") : z.string().optional(),
+    email: z.string().email("Please enter a valid email address"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
   });
 };
 
@@ -64,8 +64,21 @@ const AuthForm = ({ type }: { type: FormType }) => {
           return;
         }
 
-        toast.success("Account created successfully. Please sign in.");
-        router.push("/sign-in");
+        // Auto sign in after successful signup
+        const idToken = await userCredential.user.getIdToken();
+        const signInResult = await signIn({
+          email,
+          idToken,
+        });
+
+        if (!signInResult?.success) {
+          toast.error("Account created but sign in failed. Please sign in manually.");
+          router.push("/sign-in");
+          return;
+        }
+
+        toast.success("Account created and signed in successfully!");
+        router.push("/");
       } else {
         const { email, password } = data;
 
@@ -81,17 +94,53 @@ const AuthForm = ({ type }: { type: FormType }) => {
           return;
         }
 
-        await signIn({
+        const result = await signIn({
           email,
           idToken,
         });
 
+        if (!result?.success) {
+          toast.error(result?.message || "Sign in failed. Please try again.");
+          return;
+        }
+
         toast.success("Signed in successfully.");
         router.push("/");
       }
-    } catch (error) {
-      console.log(error);
-      toast.error(`There was an error: ${error}`);
+    } catch (error: any) {
+      console.error("Auth error:", error);
+      
+      let errorMessage = "An error occurred. Please try again.";
+      
+      if (error.code) {
+        switch (error.code) {
+          case "auth/invalid-credential":
+            errorMessage = "Invalid email or password. Please check your credentials.";
+            break;
+          case "auth/user-not-found":
+            errorMessage = "No account found with this email. Please sign up first.";
+            break;
+          case "auth/wrong-password":
+            errorMessage = "Incorrect password. Please try again.";
+            break;
+          case "auth/email-already-in-use":
+            errorMessage = "This email is already registered. Please sign in instead.";
+            break;
+          case "auth/weak-password":
+            errorMessage = "Password should be at least 6 characters long.";
+            break;
+          case "auth/invalid-email":
+            errorMessage = "Please enter a valid email address.";
+            break;
+          case "auth/too-many-requests":
+            errorMessage = "Too many failed attempts. Please try again later.";
+            break;
+          default:
+            errorMessage = error.message || "Authentication failed. Please try again.";
+        }
+      }
+      
+      toast.error(errorMessage);
     }
   };
 

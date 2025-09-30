@@ -53,14 +53,23 @@ const Agent = ({
 
   useEffect(() => {
     const onCallStart = () => {
+      console.log("Call started successfully");
       setCallStatus(CallStatus.ACTIVE);
     };
 
     const onCallEnd = () => {
+      console.log("Call ended");
       setCallStatus(CallStatus.FINISHED);
+      setIsSpeaking(false);
+    };
+
+    const onCallStarted = () => {
+      console.log("Call started and connected");
+      setCallStatus(CallStatus.ACTIVE);
     };
 
     const onMessage = (message: Message) => {
+      console.log("Message received:", message);
       if (message.type === "transcript" && message.transcriptType === "final") {
         const newMessage = { role: message.role, content: message.transcript };
         setMessages((prev) => [...prev, newMessage]);
@@ -79,9 +88,12 @@ const Agent = ({
 
     const onError = (error: Error) => {
       console.error("Vapi Error:", error);
+      setCallStatus(CallStatus.INACTIVE);
+      setIsSpeaking(false);
     };
 
     vapi.on("call-start", onCallStart);
+    vapi.on("call-started", onCallStarted);
     vapi.on("call-end", onCallEnd);
     vapi.on("message", onMessage);
     vapi.on("speech-start", onSpeechStart);
@@ -90,6 +102,7 @@ const Agent = ({
 
     return () => {
       vapi.off("call-start", onCallStart);
+      vapi.off("call-started", onCallStarted);
       vapi.off("call-end", onCallEnd);
       vapi.off("message", onMessage);
       vapi.off("speech-start", onSpeechStart);
@@ -104,20 +117,37 @@ const Agent = ({
     }
 
     const handleGenerateFeedback = async (transcriptMessages: SavedMessage[]) => {
-      console.log("Generating feedback...");
-      if (!interviewId || !userId) return;
+      console.log("Generating feedback...", { interviewId, userId, messageCount: transcriptMessages.length });
+      
+      if (!interviewId || !userId) {
+        console.error("Missing required data:", { interviewId, userId });
+        router.push("/");
+        return;
+      }
 
-      const { success } = await createFeedback({
-        interviewId: interviewId,
-        userId: userId,
-        transcript: transcriptMessages,
-        feedbackId,
-      });
+      if (transcriptMessages.length === 0) {
+        console.error("No transcript messages to save");
+        router.push("/");
+        return;
+      }
 
-      if (success) {
-        router.push(`/interview/${interviewId}/feedback`);
-      } else {
-        console.error("Failed to save feedback.");
+      try {
+        const { success, feedbackId: newFeedbackId } = await createFeedback({
+          interviewId: interviewId,
+          userId: userId,
+          transcript: transcriptMessages,
+          feedbackId,
+        });
+
+        if (success) {
+          console.log("Feedback saved successfully:", newFeedbackId);
+          router.push(`/interview/${interviewId}/feedback`);
+        } else {
+          console.error("Failed to save feedback.");
+          router.push("/");
+        }
+      } catch (error) {
+        console.error("Error in handleGenerateFeedback:", error);
         router.push("/");
       }
     };
@@ -134,32 +164,32 @@ const Agent = ({
   const handleCall = async () => {
     setCallStatus(CallStatus.CONNECTING);
 
-    if (type === "generate") {
-      // --- CORRECTED BLOCK ---
-      await vapi.start('7cc72116-11c6-4eef-81c5-df394cc5fd41', {
-        variableValues: {
-          username: userName,
-          userid: userId,
-        },
-      });
-      // --- END OF CORRECTION ---
-    } else {
-      let formattedQuestions = "";
-      if (questions) {
+    try {
+      console.log("Starting VAPI call with type:", type);
+      
+      let formattedQuestions = "Tell me about yourself.";
+      if (questions && questions.length > 0) {
         formattedQuestions = questions
           .map((question) => `- ${question}`)
           .join("\n");
       }
 
+      console.log("Starting with interviewer config");
       await vapi.start(interviewer, {
         variableValues: {
           questions: formattedQuestions,
+          username: userName || "Candidate",
+          userid: userId || "guest",
         },
       });
+    } catch (error) {
+      console.error("Failed to start call:", error);
+      setCallStatus(CallStatus.INACTIVE);
     }
   };
 
   const handleDisconnect = () => {
+    console.log("Manually ending call");
     setCallStatus(CallStatus.FINISHED);
     vapi.stop();
   };

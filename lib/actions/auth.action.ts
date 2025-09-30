@@ -8,21 +8,28 @@ const SESSION_DURATION = 60 * 60 * 24 * 7;
 
 // Set session cookie
 export async function setSessionCookie(idToken: string) {
-  const cookieStore = await cookies();
+  try {
+    const cookieStore = await cookies();
 
-  // Create session cookie
-  const sessionCookie = await auth.createSessionCookie(idToken, {
-    expiresIn: SESSION_DURATION * 1000, // milliseconds
-  });
+    // Create session cookie
+    const sessionCookie = await auth.createSessionCookie(idToken, {
+      expiresIn: SESSION_DURATION * 1000, // milliseconds
+    });
 
-  // Set cookie in the browser
-  cookieStore.set("session", sessionCookie, {
-    maxAge: SESSION_DURATION,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    sameSite: "lax",
-  });
+    // Set cookie in the browser
+    cookieStore.set("session", sessionCookie, {
+      maxAge: SESSION_DURATION,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      sameSite: "lax",
+    });
+    
+    console.log("Session cookie set successfully");
+  } catch (error) {
+    console.error("Error setting session cookie:", error);
+    throw error;
+  }
 }
 
 export async function signUp(params: SignUpParams) {
@@ -72,15 +79,21 @@ export async function signIn(params: SignInParams) {
 
   try {
     const userRecord = await auth.getUserByEmail(email);
-    if (!userRecord)
+    if (!userRecord) {
       return {
         success: false,
         message: "User does not exist. Create an account.",
       };
+    }
 
     await setSessionCookie(idToken);
+    
+    return {
+      success: true,
+      message: "Signed in successfully.",
+    };
   } catch (error: any) {
-    console.log("");
+    console.error("Sign in error:", error);
 
     return {
       success: false,
@@ -101,25 +114,34 @@ export async function getCurrentUser(): Promise<User | null> {
   const cookieStore = await cookies();
 
   const sessionCookie = cookieStore.get("session")?.value;
+  console.log("Session cookie exists:", !!sessionCookie);
+  
   if (!sessionCookie) return null;
 
   try {
     const decodedClaims = await auth.verifySessionCookie(sessionCookie, true);
+    console.log("Session verified for user:", decodedClaims.uid);
 
     // get user info from db
     const userRecord = await db
       .collection("users")
       .doc(decodedClaims.uid)
       .get();
-    if (!userRecord.exists) return null;
+    
+    if (!userRecord.exists) {
+      console.log("User record not found in database");
+      return null;
+    }
 
-    return {
+    const userData = {
       ...userRecord.data(),
       id: userRecord.id,
     } as User;
+    
+    console.log("User data retrieved:", userData.email);
+    return userData;
   } catch (error) {
-    console.log(error);
-
+    console.log("Session verification failed:", error);
     // Invalid or expired session
     return null;
   }

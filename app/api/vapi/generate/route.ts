@@ -73,21 +73,45 @@ export async function POST(request: Request) {
   try {
     const { text: questions } = await generateText({
       model: google("gemini-2.0-flash-001"),
-      prompt: `[Your Original Prompt Here...]` // अपना प्रॉम्प्ट यहाँ डालें
+      prompt: `Generate ${amount} interview questions for a ${level} level ${role} position.
+      
+      Tech stack: ${techstack}
+      Interview type: ${type}
+      
+      Requirements:
+      - Questions should be appropriate for ${level} level
+      - Focus on ${type} aspects
+      - Include questions about: ${techstack}
+      - Return ONLY a JSON array of questions
+      - No additional text or formatting
+      
+      Example format: ["Question 1", "Question 2", "Question 3"]
+      
+      Generate exactly ${amount} questions.`
     });
 
+    // Clean the response to extract JSON from markdown code blocks
+    const cleanedQuestions = questions.replace(/```json\s*|```\s*/g, '').trim();
+    
     const interview = {
-      role, type, level, userId: userid,
-      techstack: techstack.split(","),
-      questions: JSON.parse(questions),
+      role, 
+      type, 
+      level, 
+      userId: userid,
+      techstack: techstack.split(",").map((tech: string) => tech.trim()),
+      questions: JSON.parse(cleanedQuestions),
       finalized: true,
       coverImage: getRandomInterviewCover(),
       createdAt: new Date().toISOString(),
     };
 
-    await db.collection("interviews").add(interview);
+    const docRef = await db.collection("interviews").add(interview);
     revalidatePath("/");
-    return Response.json({ success: true }, { status: 200 });
+    
+    return Response.json({ 
+      success: true, 
+      interviewId: docRef.id 
+    }, { status: 200 });
 
   } catch (error) {
     console.error("Error:", error);

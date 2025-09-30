@@ -24,17 +24,10 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // config options here
-  // images: {
-  //   remotePatterns: [
-  //     {
-  //       protocol: "https",
-  //       hostname: "ik.imagekit.io",
-  //       port: "",
-  //     },
-  //   ],
-  // },
-
+  env: {
+    NEXT_PUBLIC_VAPI_WEB_TOKEN: process.env.NEXT_PUBLIC_VAPI_WEB_TOKEN,
+    NEXT_PUBLIC_VAPI_ASSISTANT_ID: process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID,
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },

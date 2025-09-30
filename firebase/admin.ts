@@ -1,21 +1,28 @@
-// firebase/admin.ts
-
 import admin from "firebase-admin";
 
-// आपकी .env.local फ़ाइल में दिए गए वेरिएबल्स
+// Validate required environment variables
+if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_PRIVATE_KEY || !process.env.FIREBASE_CLIENT_EMAIL) {
+  throw new Error('Missing required Firebase admin configuration');
+}
+
 const serviceAccount = {
   projectId: process.env.FIREBASE_PROJECT_ID,
-  privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'), // Private key को ठीक करता है
+  privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
   clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
 };
 
+// Initialize Firebase Admin only once
+let app: admin.app.App;
 if (!admin.apps.length) {
-  admin.initializeApp({
+  app = admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
+} else {
+  app = admin.app();
 }
 
-const db = admin.firestore();
-const auth = admin.auth(); // auth को यहाँ एक्सपोर्ट करें
+// Get Firestore instance
+const db = admin.firestore(app);
+const auth = admin.auth(app);
 
-export { db, auth }; // db और auth दोनों को एक्सपोर्ट करें
+export { db, auth };
